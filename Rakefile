@@ -4,8 +4,7 @@ require 'json'
 require 'time'
 require "./lib/plugin-directory-utils"
 
-GITHUB_AUTH_TOKEN = `git config com.bohemiancoding.qa.token`.strip
-USERNAME = `git config github.user`.strip
+GITHUB_AUTH_TOKEN = ENV['GITHUB_TOKEN']
 
 def title_for plugin
   title = plugin['title'] || plugin['name']
@@ -28,6 +27,7 @@ end
 def is_plugin_too_old? plugin
   if plugin['lastUpdated']
     last_update = Time.parse(plugin['lastUpdated'])
+    # If plugin is more than two years old, it is probably not maintained
     return (Time.now - last_update) > 60_000_000
   else
     return false
@@ -78,7 +78,7 @@ EOF
 
   plugins.sort_by { |k| [ (k["title"] ? k["title"].downcase : k["name"].downcase), (k["owner"] ? k["owner"].downcase : k["author"].downcase) ] }.each do |plugin|
 
-    puts "Processing #{plugin}"
+    # puts "Processing #{plugin}"
 
     name   = plugin['name']
     title  = title_for plugin
@@ -121,7 +121,7 @@ EOF
     owner  = plugin['owner']
     author = plugin['author'] || owner
     url    = plugin['homepage'] || "https://github.com/#{owner.downcase}/#{name.downcase}"
-    desc   = plugin['description'].strip
+    desc   = (plugin['description'] || "").strip
     output << "- [#{title}](#{url}), by #{author}:"
     if !desc.empty?
       output << " #{desc}"
@@ -154,21 +154,28 @@ task :lastUpdated do
   json_data.each do |plugin|
     # Only check for last push date for plugins with a repo
     if plugin['owner'] && plugin['name']
-      puts "Updating #{titlefy(plugin['name'])}"
+      # puts "Updating #{titlefy(plugin['name'])}"
       plugin_url = plugin['owner'] + "/" + plugin['name']
       begin
         repo = client.repo(plugin_url)
-        user = client.user(plugin['owner'])
-        puts "— Plugin was updated at #{repo.pushed_at}"
+        # user = client.user(plugin['owner'])
+        # puts "— Plugin was updated at #{repo.pushed_at}"
         plugin['lastUpdated'] = repo.pushed_at
       rescue Exception => e
-        puts "— Repo not available"
+        puts e
+        puts "https://github.com/#{plugin['owner']}/#{plugin['name']}"
       end
 
       # if plugin['name'] == plugin['title'] && plugin['title'] == nil
       #   puts "— Plugin title is wrong, fixing"
       #   plugin['title'] = titlefy(plugin['name'])
       # end
+    else
+      if plugin['lastUpdated'].nil?
+        puts plugin['name']
+        puts plugin['title']
+        puts "— Plugin is not on GitHub, you may want to manually add a date"
+      end
     end
     puts
   end
@@ -201,7 +208,7 @@ task :interactive do
         STDOUT.puts "README.md updated."
 
         STDOUT.puts "To commit your plugin to the plugin directory, open a pull request for https://github.com/sketchplugins/plugin-directory/."
-    rescue SystemExit, Interrupt # Allow for interupt to leave script
+    rescue SystemExit, Interrupt # Allow for interrupt to leave script
         exit
     end
 end
@@ -239,7 +246,7 @@ def prompt_gh_plugin()
         # Prompt for plugin
         return prompt_inputs(defaults, true)
     else
-        STDOUT.puts "ERROR: '#{input}' is not a valid GitHub repoistory."
+        STDOUT.puts "ERROR: '#{input}' is not a valid GitHub repository."
         prompt_gh_url()
     end
 end
@@ -336,7 +343,7 @@ def get_gh_defaults(owner, name)
         defaults["branch"] = repo.default_branch
 
         return defaults
-    rescue SystemExit, Interrupt # Allow for interupt to leave script
+    rescue SystemExit, Interrupt # Allow for interrupt to leave script
         exit
     rescue # Error contacting GitHub API
         STDOUT.puts "ERROR: The repository '#{repo_name}' does not exist or is not publically accessible on GitHub."
@@ -439,7 +446,7 @@ def get_manifest_content(owner, name, branch)
 
         return nil
 
-    rescue SystemExit, Interrupt # Allow for interupt to leave script
+    rescue SystemExit, Interrupt # Allow for interrupt to leave script
         exit
     rescue # Error contacting GitHub API
         puts e
@@ -539,7 +546,7 @@ task :stars do
   #   f.write(JSON.pretty_generate(json_data, :indent => "  "))
   # end
 
-  
+
 end
 
 desc "Default: generate README.md from plugin"
